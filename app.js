@@ -1,15 +1,29 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const csvParser = require('csv-parse');
 const path = require('path');
-const sequelize = require("./Util/sequalize");
-
 const showErrorPage = require('./Controller/error');
-const product = require("./models/product");
 const user = require("./models/user");
-app.use(bodyParser.urlencoded({extented:false}));
+const Sequelize = require("sequelize");
+const session = require('express-session');
+const SessionStore = require('express-session-sequelize')(session.Store);
+const sequelize = new Sequelize('practiseapp','root','Current-Root-Password',{
+    dialect:'mysql',
+    host:'localhost',
+});
 
+const sequelizeSessionStore = new SessionStore({
+    db: sequelize,
+});
+
+
+app.use(bodyParser.urlencoded({extented:false}));
+app.use(session({
+    secret: 'keyboard cat',
+    resave: false,
+    store: sequelizeSessionStore,
+    saveUninitialized: true
+}))
 
 
 app.set('view engine','ejs');
@@ -24,11 +38,18 @@ sequelize.sync().then(result =>{
 });
 
 
-
+let isAuth = (req,res,next)=>{
+    if(!req.session.isLoggedIn){
+        res.redirect('/signup')
+    }
+    else{
+        next();
+    }
+}
 
 
 app.get("/",(req,res)=>{
-    res.send("Hello")
+    res.redirect("/signup")
 })
 
 app.get("/signup",(req,res)=>{
@@ -56,18 +77,39 @@ app.get("/login",(req,res,next)=>{
 app.post("/login",(req,res,next)=>{
     const email = req.body.inputEmail
     const password = req.body.inputPassword
-    user.findAll({
+    user.findOne({
         where:{
             email:email,
             password: password
         }
     })
-    .then(users=>{
-        console.log(users)
+    .then(user=>{
+        if (user==null){
+            res.render('./login')
+        }
+        else{
+            req.session.user = user;
+            req.session.isLoggedIn = true;
+            req.session.save();
+            res.redirect('/home')
+        }
     })
     .catch(err=>{
         console.log(err);
     })
+})
+
+
+app.get('/home',isAuth,function(req,res,next){
+    res.render('./homepage')
+})
+
+app.get('/logout',function(req,res,next){
+    req.session.destroy(err=>{
+        console.log(err)
+        res.redirect('/signup')
+    });
+    
 })
 
 
